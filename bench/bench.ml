@@ -197,12 +197,14 @@ let () =
               ~quota:(Time.second 1.) () in
   let raw = Benchmark.all cfg instances benchmarks in
   let results = Analyze.all ols Instance.monotonic_clock raw in
+  let entries = Hashtbl.fold (fun k v acc -> (k, v) :: acc) results [] in
+  let entries = List.sort (fun (a, _) (b, _) -> String.compare a b) entries in
   Printf.printf "--- Benchmark results (ns/run) ---\n";
-  Hashtbl.iter (fun test_name result ->
+  List.iter (fun (test_name, result) ->
     match Analyze.OLS.estimates result with
     | Some [ ns_per_run ] ->
       Printf.printf "  %-45s %12.1f\n" test_name ns_per_run
     | _ ->
       Printf.printf "  %-45s (no estimate)\n" test_name)
-    results;
+    entries;
   Printf.printf "---\n"

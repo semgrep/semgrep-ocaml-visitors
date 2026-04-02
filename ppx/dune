@@ -1,0 +1,10 @@
+(copy_files ../vendor/visitors/src/*.ml)
+(copy_files ../vendor/visitors/src/*.mli)
+
+(library
+ (name ppx_deriving_visitors)
+ (public_name visitors-cleanroom.ppx)
+ (synopsis "Compile-time support for generating visitors")
+ (kind ppx_deriver)
+ (libraries result compiler-libs.common ppxlib ppx_deriving.api)
+ (ppx_runtime_libraries visitorsRuntime))

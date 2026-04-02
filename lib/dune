@@ -1,2 +1,3 @@
 (library
- (name visitorsRuntime))
+ (name visitorsRuntime)
+ (public_name visitors-cleanroom))

@@ -1,0 +1,3 @@
+[submodule "vendor/visitors"]
+	path = vendor/visitors
+	url = https://gitlab.inria.fr/fpottier/visitors.git

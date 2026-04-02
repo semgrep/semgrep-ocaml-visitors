@@ -35,20 +35,23 @@ let array_equal eq a1 a2 =
     i >= n || (eq (Array.unsafe_get a1 i) (Array.unsafe_get a2 i) && loop (i + 1)) (* nosemgrep: ocaml.lang.security.unsafe.ocamllint-unsafe *)
   in
   loop 0
+[@@inline]
 
 exception StructuralMismatch
 
-let fail () = raise StructuralMismatch
+let fail () = raise StructuralMismatch [@@inline]
 
 let wrap f x =
   match f x with
   | _ -> true
   | exception StructuralMismatch -> false
+[@@inline]
 
 let wrap2 f x y =
   match f x y with
   | _ -> true
   | exception StructuralMismatch -> false
+[@@inline]
 
 (* ---------- Monoid classes ---------- *)
 
@@ -136,7 +139,8 @@ class ['self] map = object (self)
       let n = Array.length arr in
       if n = 0 then [||]
       else begin
-        (* SAFETY: index 0 is valid because n > 0 (guarded by if); i in [1, n) by for-loop bound. *)
+        (* SAFETY: index 0 is valid because n > 0 (guarded by if); i in [1, n) by for-loop bound;
+           r has length n (Array.make n ...), so unsafe_set r i is in bounds. *)
         let r = Array.make n (f env (Array.unsafe_get arr 0)) in (* nosemgrep: ocaml.lang.security.unsafe.ocamllint-unsafe *)
         for i = 1 to n - 1 do
           Array.unsafe_set r i (f env (Array.unsafe_get arr i)) (* nosemgrep: ocaml.lang.security.unsafe.ocamllint-unsafe *)
@@ -358,17 +362,18 @@ class virtual ['self] mapreduce = object (self)
       let plus = self#plus in
       if n = 0 then ([||], self#zero)
       else begin
-        (* SAFETY: index 0 is valid because n > 0; i in [1, n) by for-loop bound;
+        (* SAFETY: index 0 is valid because n > 0; i in [1, n) by loop guard;
            r has length n (Array.make n ...). *)
         let (y0, s0) = f env (Array.unsafe_get arr 0) in (* nosemgrep: ocaml.lang.security.unsafe.ocamllint-unsafe *)
         let r = Array.make n y0 in
-        let acc = ref s0 in
-        for i = 1 to n - 1 do
-          let (y, s) = f env (Array.unsafe_get arr i) in (* nosemgrep: ocaml.lang.security.unsafe.ocamllint-unsafe *)
-          Array.unsafe_set r i y; (* nosemgrep: ocaml.lang.security.unsafe.ocamllint-unsafe *)
-          acc := plus !acc s
-        done;
-        (r, !acc)
+        let rec loop acc i =
+          if i >= n then (r, acc)
+          else
+            let (y, s) = f env (Array.unsafe_get arr i) in (* nosemgrep: ocaml.lang.security.unsafe.ocamllint-unsafe *)
+            Array.unsafe_set r i y; (* nosemgrep: ocaml.lang.security.unsafe.ocamllint-unsafe *)
+            loop (plus acc s) (i + 1)
+        in
+        loop s0 1
       end
 
   method private visit_bool : 'env. 'env -> bool -> bool * 's
@@ -473,7 +478,8 @@ let map2_array f env a1 a2 =
   if n = 0 then [||]
   else begin
     (* SAFETY: index 0 is valid because n > 0; i in [1, n) by for-loop bound;
-       n = Array.length a1 = Array.length a2 by the length check above. *)
+       n = Array.length a1 = Array.length a2 by the length check above;
+       r has length n (Array.make n ...), so unsafe_set r i is in bounds. *)
     let r = Array.make n (f env (Array.unsafe_get a1 0) (Array.unsafe_get a2 0)) in (* nosemgrep: ocaml.lang.security.unsafe.ocamllint-unsafe *)
     for i = 1 to n - 1 do
       Array.unsafe_set r i (f env (Array.unsafe_get a1 i) (Array.unsafe_get a2 i)) (* nosemgrep: ocaml.lang.security.unsafe.ocamllint-unsafe *)
@@ -687,14 +693,13 @@ class virtual ['self] reduce2 = object (self)
     : 'env 'a 'b.
         ('env -> 'a -> 'b -> 's) -> 'env -> 'a list -> 'b list -> 's
     = fun f env xs ys ->
-      let rec loop acc xs ys =
-        match xs, ys with
-        | [], [] -> acc
-        | x :: xs', y :: ys' ->
-          loop (self#plus acc (f env x y)) xs' ys'
-        | _ -> raise StructuralMismatch
-      in
-      loop self#zero xs ys
+      match xs, ys with
+      | [], [] -> self#zero
+      | x :: xs', y :: ys' ->
+        let s = f env x y in
+        self#plus s
+          ((self#visit_list : _ -> _ -> _ list -> _ list -> _) f env xs' ys')
+      | _ -> raise StructuralMismatch
 
   method private visit_nativeint : 'env. 'env -> nativeint -> nativeint -> 's
     = fun _ a b -> if a <> b then raise StructuralMismatch; self#zero
@@ -745,17 +750,18 @@ class virtual ['self] mapreduce2 = object (self)
       let plus = self#plus in
       if n = 0 then ([||], self#zero)
       else begin
-        (* SAFETY: index 0 is valid because n > 0; i in [1, n) by for-loop bound;
+        (* SAFETY: index 0 is valid because n > 0; i in [1, n) by loop guard;
            n = Array.length a1 = Array.length a2 by the length check; r has length n. *)
         let (z0, s0) = f env (Array.unsafe_get a1 0) (Array.unsafe_get a2 0) in (* nosemgrep: ocaml.lang.security.unsafe.ocamllint-unsafe *)
         let r = Array.make n z0 in
-        let acc = ref s0 in
-        for i = 1 to n - 1 do
-          let (z, s) = f env (Array.unsafe_get a1 i) (Array.unsafe_get a2 i) in (* nosemgrep: ocaml.lang.security.unsafe.ocamllint-unsafe *)
-          Array.unsafe_set r i z; (* nosemgrep: ocaml.lang.security.unsafe.ocamllint-unsafe *)
-          acc := plus !acc s
-        done;
-        (r, !acc)
+        let rec loop acc i =
+          if i >= n then (r, acc)
+          else
+            let (z, s) = f env (Array.unsafe_get a1 i) (Array.unsafe_get a2 i) in (* nosemgrep: ocaml.lang.security.unsafe.ocamllint-unsafe *)
+            Array.unsafe_set r i z; (* nosemgrep: ocaml.lang.security.unsafe.ocamllint-unsafe *)
+            loop (plus acc s) (i + 1)
+        in
+        loop s0 1
       end
 
   method private visit_bool : 'env. 'env -> bool -> bool -> bool * 's

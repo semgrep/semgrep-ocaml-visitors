@@ -1,0 +1,4 @@
+; Mark the visitors submodule as data-only so dune won't try to build it
+; (which would conflict with our own VisitorsRuntime).
+; We use (copy_files ...) in ppx/ to pull just the PPX sources we need.
+(data_only_dirs visitors)
