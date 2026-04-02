@@ -1,0 +1,35 @@
+/_build/
+
+*.swp
+*.marshall
+
+/src/generated/*.ml
+/TAGS
+
+# editor
+.vscode
+
+# mac
+.DS_Store
+
+# stats
+/naming-stats/logs/
+/naming-stats/results.txt
+
+# nix
+result
+# direnv
+.direnv
+
+# Python
+/**/__pycache__
+
+# OCaml
+# We won't commit the top-level `semgrep.opam.locked` that is decided by our
+# `pick-lockfile.sh` script, as non of them can satisfy every machine.
+semgrep-pro.opam.locked
+# this is needed since ocaml/setup-ocaml adds this directory as a cache
+_opam/
+
+# Minimize the risk of logs accidentally becoming public
+*.log
