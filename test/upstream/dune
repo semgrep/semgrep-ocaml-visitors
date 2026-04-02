@@ -1,0 +1,3 @@
+(library
+ (name upstream_visitors_runtime)
+ (libraries visitors.runtime))
