@@ -281,7 +281,7 @@ class ['self] endo = object (self)
   method private visit_unit : 'env. 'env -> unit -> unit = fun _ () -> ()
 end
 
-class virtual ['self] reduce = object (self)
+class virtual ['self] reduce = object (self : 'self)
   inherit ['s] monoid
 
   method private list_fold_left
@@ -347,7 +347,7 @@ class virtual ['self] reduce = object (self)
   method private visit_unit : 'env. 'env -> unit -> 's = fun _ () -> self#zero
 end
 
-class virtual ['self] mapreduce = object (self)
+class virtual ['self] mapreduce = object (self : 'self)
   inherit ['s] monoid
 
   method private visit_array
@@ -645,7 +645,7 @@ class ['self] map2 = object (self)
     = fun _ () () -> ()
 end
 
-class virtual ['self] reduce2 = object (self)
+class virtual ['self] reduce2 = object (self : 'self)
   inherit ['s] monoid
 
   method private visit_array
