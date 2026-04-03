@@ -33,3 +33,5 @@ _opam/
 
 # Minimize the risk of logs accidentally becoming public
 *.log
+
+*.install

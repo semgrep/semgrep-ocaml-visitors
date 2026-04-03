@@ -37,6 +37,14 @@ dune test
 Passing tests produce no output. Use `dune test --force` to see
 results unconditionally.
 
+**Note:** The test suite links both our `VisitorsRuntime` and the
+upstream `visitors.runtime` into the same executable for comparison.
+These have different `.cmi` digests (our interface doesn't depend on
+the `result` compat package). `dune test` handles this correctly
+because each library is compiled in isolation, but `ocaml-lsp` may
+report "inconsistent assumptions over interface VisitorsRuntime" in
+the test files. This is expected and can be safely ignored.
+
 ## Benchmarks
 
 ```sh

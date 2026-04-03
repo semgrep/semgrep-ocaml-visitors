@@ -340,6 +340,56 @@ class theirs_reduce_sub = object
   method array_ (f : unit -> int -> int) xs = super#visit_array f () xs
 end
 
+(* -- iter with visit_list override to test self-call dispatch -- *)
+(* If visit_list used List.iter internally instead of recursive self-calls,
+   a subclass override of visit_list would be silently bypassed. *)
+class ours_iter_custom_visit_list = object
+  inherit [_] Ours.iter as super
+  val mutable call_count = 0
+  method get_call_count = call_count
+  method! visit_list
+    : 'env 'a. ('env -> 'a -> unit) -> 'env -> 'a list -> unit
+    = fun f env xs ->
+      call_count <- call_count + 1;
+      super#visit_list f env xs
+  method list_ (f : unit -> int -> unit) xs = super#visit_list f () xs
+end
+class theirs_iter_custom_visit_list = object
+  inherit [_] Theirs.iter as super
+  val mutable call_count = 0
+  method get_call_count = call_count
+  method! visit_list
+    : 'env 'a. ('env -> 'a -> unit) -> 'env -> 'a list -> unit
+    = fun f env xs ->
+      call_count <- call_count + 1;
+      super#visit_list f env xs
+  method list_ (f : unit -> int -> unit) xs = super#visit_list f () xs
+end
+
+(* -- map with visit_list override -- *)
+class ours_map_custom_visit_list = object
+  inherit [_] Ours.map as super
+  val mutable call_count = 0
+  method get_call_count = call_count
+  method! visit_list
+    : 'env 'a 'b. ('env -> 'a -> 'b) -> 'env -> 'a list -> 'b list
+    = fun f env xs ->
+      call_count <- call_count + 1;
+      super#visit_list f env xs
+  method list_ (f : unit -> int -> int) xs = super#visit_list f () xs
+end
+class theirs_map_custom_visit_list = object
+  inherit [_] Theirs.map as super
+  val mutable call_count = 0
+  method get_call_count = call_count
+  method! visit_list
+    : 'env 'a 'b. ('env -> 'a -> 'b) -> 'env -> 'a list -> 'b list
+    = fun f env xs ->
+      call_count <- call_count + 1;
+      super#visit_list f env xs
+  method list_ (f : unit -> int -> int) xs = super#visit_list f () xs
+end
+
 (* ------------------------------------------------------------------ *)
 (* Helpers for catching StructuralMismatch from either implementation  *)
 (* ------------------------------------------------------------------ *)
@@ -404,8 +454,8 @@ let test_wrap =
     ~count:200
     QCheck.bool
     (fun b ->
-       let f () = if b then () else raise Ours.StructuralMismatch in
-       let g () = if b then () else raise Theirs.StructuralMismatch in
+       let f () = if not b then raise Ours.StructuralMismatch in
+       let g () = if not b then raise Theirs.StructuralMismatch in
        Ours.wrap f () = Theirs.wrap g ())
 
 let test_wrap2 =
@@ -514,6 +564,10 @@ let test_map_bool =
        (new ours_map)#bool_ x = (new theirs_map)#bool_ x)
 
 (* -- endo -- *)
+
+(* physical equality (==) is intentional — testing that endo
+  preserves the original object when the transform is the identity. *)
+
 let test_endo_identity_list =
   QCheck.Test.make ~name:"endo#visit_list preserves identity when no change"
     ~count:500
@@ -522,6 +576,8 @@ let test_endo_identity_list =
        let identity () x = x in
        let o_res = (new ours_endo)#list_ identity xs in
        let t_res = (new theirs_endo)#list_ identity xs in
+
+       (* nosemgrep: ocaml.lang.correctness.physical-vs-structural.physical-equal *)
        (o_res == xs) = (t_res == xs))
 
 let test_endo_change_list =
@@ -540,7 +596,8 @@ let test_endo_identity_option =
        let identity () x = x in
        let o_res = (new ours_endo)#option_ identity opt in
        let t_res = (new theirs_endo)#option_ identity opt in
-       (o_res == opt) = (t_res == opt))
+       (* nosemgrep: ocaml.lang.correctness.physical-vs-structural.physical-equal *)
+       (o_res == opt) = (t_res == opt)) 
 
 let test_endo_identity_result =
   QCheck.Test.make ~name:"endo#visit_result preserves identity when no change"
@@ -550,8 +607,8 @@ let test_endo_identity_result =
        let identity () x = x in
        let o_res = (new ours_endo)#result_ identity identity r in
        let t_res = (new theirs_endo)#result_ identity identity r in
-       (o_res == r) = (t_res == r))
-
+       (* nosemgrep: ocaml.lang.correctness.physical-vs-structural.physical-equal *)
+       (o_res == r) = (t_res == r)) 
 (* -- reduce -- *)
 let test_reduce_list =
   QCheck.Test.make ~name:"reduce#visit_list agrees (sum)"
@@ -765,7 +822,7 @@ let test_endo_lazy_identity =
        ignore (Lazy.force lz);
        let o_res = (new ours_endo)#lazy_ (fun () x -> x) lz in
        let t_res = (new theirs_endo)#lazy_ (fun () x -> x) lz in
-       (o_res == lz) = (t_res == lz))
+       (o_res == lz) = (t_res == lz)) (* nosemgrep: ocaml.lang.correctness.physical-vs-structural.physical-equal *)
 
 let test_endo_lazy_change =
   QCheck.Test.make ~name:"endo#visit_lazy_t correct value when changed"
@@ -797,7 +854,7 @@ let test_endo_array_identity =
     (fun arr ->
        let o_res = (new ours_endo)#array_ (fun () x -> x) arr in
        let t_res = (new theirs_endo)#array_ (fun () x -> x) arr in
-       (o_res == arr) = (t_res == arr))
+       (o_res == arr) = (t_res == arr)) (* nosemgrep: ocaml.lang.correctness.physical-vs-structural.physical-equal *)
 
 let test_endo_array_change =
   QCheck.Test.make ~name:"endo#visit_array correct value when changed"
@@ -1096,28 +1153,28 @@ let boundary_endo_empty_list =
     let xs = [] in
     let o = (new ours_endo)#list_ (fun () x -> x) xs in
     let t = (new theirs_endo)#list_ (fun () x -> x) xs in
-    Alcotest.(check bool) "phys eq" (o == xs) (t == xs))
+    Alcotest.(check bool) "phys eq" (o == xs) (t == xs)) (* nosemgrep: ocaml.lang.correctness.physical-vs-structural.physical-equal *)
 
 let boundary_endo_singleton_list =
   Alcotest.test_case "endo singleton list identity" `Quick (fun () ->
     let xs = [42] in
     let o = (new ours_endo)#list_ (fun () x -> x) xs in
     let t = (new theirs_endo)#list_ (fun () x -> x) xs in
-    Alcotest.(check bool) "phys eq" (o == xs) (t == xs))
+    Alcotest.(check bool) "phys eq" (o == xs) (t == xs)) (* nosemgrep: ocaml.lang.correctness.physical-vs-structural.physical-equal *)
 
 let boundary_endo_empty_array =
   Alcotest.test_case "endo empty array identity" `Quick (fun () ->
     let arr = [||] in
     let o = (new ours_endo)#array_ (fun () x -> x) arr in
     let t = (new theirs_endo)#array_ (fun () x -> x) arr in
-    Alcotest.(check bool) "phys eq" (o == arr) (t == arr))
+    Alcotest.(check bool) "phys eq" (o == arr) (t == arr)) (* nosemgrep: ocaml.lang.correctness.physical-vs-structural.physical-equal *)
 
 let boundary_endo_singleton_array =
   Alcotest.test_case "endo singleton array identity" `Quick (fun () ->
     let arr = [|99|] in
     let o = (new ours_endo)#array_ (fun () x -> x) arr in
     let t = (new theirs_endo)#array_ (fun () x -> x) arr in
-    Alcotest.(check bool) "phys eq" (o == arr) (t == arr))
+    Alcotest.(check bool) "phys eq" (o == arr) (t == arr)) (* nosemgrep: ocaml.lang.correctness.physical-vs-structural.physical-equal *)
 
 let boundary_reduce_empty_list =
   Alcotest.test_case "reduce empty list" `Quick (fun () ->
@@ -1179,7 +1236,7 @@ let test_endo_ref_identity =
        let r = ref x in
        let o_res = (new ours_endo)#ref_ (fun () v -> v) r in
        let t_res = (new theirs_endo)#ref_ (fun () v -> v) r in
-       (o_res == r) = (t_res == r))
+       (o_res == r) = (t_res == r)) (* nosemgrep: ocaml.lang.correctness.physical-vs-structural.physical-equal *)
 
 let test_endo_ref_change =
   Alcotest.test_case "endo#visit_ref changes value correctly" `Quick (fun () ->
@@ -1187,7 +1244,7 @@ let test_endo_ref_change =
     let o = (new ours_endo)#ref_ (fun () v -> v + 1) r in
     let t = (new theirs_endo)#ref_ (fun () v -> v + 1) r in
     Alcotest.(check int) "value" !o !t;
-    Alcotest.(check bool) "not phys eq" (o != r) (t != r))
+    Alcotest.(check bool) "not phys eq" (o != r) (t != r)) (* nosemgrep *)
 
 (* ------------------------------------------------------------------ *)
 (* Partial-change endo (some elements change, some don't)              *)
@@ -1213,7 +1270,7 @@ let test_endo_partial_change_list_identity =
        let o_res = (new ours_endo)#list_ f xs in
        let t_res = (new theirs_endo)#list_ f xs in
        (* Both should agree on whether the result is physically equal *)
-       (o_res == xs) = (t_res == xs))
+       (o_res == xs) = (t_res == xs)) (* nosemgrep: ocaml.lang.correctness.physical-vs-structural.physical-equal *)
 
 let test_endo_partial_change_array =
   QCheck.Test.make ~name:"endo#visit_array partial change agrees"
@@ -1232,7 +1289,7 @@ let test_endo_partial_change_array_identity =
        let f () x = if x mod 3 = 0 then x + 1 else x in
        let o_res = (new ours_endo)#array_ f arr in
        let t_res = (new theirs_endo)#array_ f arr in
-       (o_res == arr) = (t_res == arr))
+       (o_res == arr) = (t_res == arr)) (* nosemgrep: ocaml.lang.correctness.physical-vs-structural.physical-equal *)
 
 (* ------------------------------------------------------------------ *)
 (* mapreduce array fold direction with non-associative monoid          *)
@@ -1419,6 +1476,68 @@ let mismatch_reduce2_diff_len_array =
       (new theirs_reduce2)#array_ (fun () a b -> a + b) [|1|] [|1;2|]) in
     Alcotest.(check bool) "both mismatch"
       (match or_, tr_ with `Mismatch, `Mismatch -> true | _ -> false) true)
+
+(* ------------------------------------------------------------------ *)
+(* visit_list self-call dispatch                                       *)
+(* If visit_list used List.iter/List.map internally instead of         *)
+(* recursive self-calls, subclass overrides would be bypassed.         *)
+(* ------------------------------------------------------------------ *)
+
+let test_iter_visit_list_override =
+  (* visit_list must use recursive self-calls so that a subclass override
+     of visit_list fires on every cons cell, not just the initial call.
+     We verify our call count matches upstream exactly. *)
+  QCheck.Test.make ~name:"iter#visit_list calls subclass override"
+    ~count:500
+    list_int_gen
+    (fun xs ->
+       let o = new ours_iter_custom_visit_list in
+       let t = new theirs_iter_custom_visit_list in
+       o#list_ (fun () _ -> ()) xs;
+       t#list_ (fun () _ -> ()) xs;
+       o#get_call_count = t#get_call_count)
+
+let test_iter_visit_list_override_recursive =
+  (* Stronger check: for a non-empty list, the override must fire more
+     than once (proving recursion through self#visit_list, not List.iter). *)
+  Alcotest.test_case "iter#visit_list override is recursive" `Quick (fun () ->
+    let o = new ours_iter_custom_visit_list in
+    o#list_ (fun () _ -> ()) [1; 2; 3];
+    Alcotest.(check bool) "override called recursively (>1)"
+      (o#get_call_count > 1) true)
+
+let test_map_visit_list_override =
+  QCheck.Test.make ~name:"map#visit_list calls subclass override"
+    ~count:500
+    list_int_gen
+    (fun xs ->
+       let o = new ours_map_custom_visit_list in
+       let t = new theirs_map_custom_visit_list in
+       ignore (o#list_ (fun () x -> x) xs);
+       ignore (t#list_ (fun () x -> x) xs);
+       o#get_call_count = t#get_call_count)
+
+let test_map_visit_list_override_recursive =
+  Alcotest.test_case "map#visit_list override is recursive" `Quick (fun () ->
+    let o = new ours_map_custom_visit_list in
+    ignore (o#list_ (fun () x -> x) [1; 2; 3]);
+    Alcotest.(check bool) "override called recursively (>1)"
+      (o#get_call_count > 1) true)
+
+(* ------------------------------------------------------------------ *)
+(* array_equal asserts on length mismatch                              *)
+(* ------------------------------------------------------------------ *)
+
+let test_array_equal_length_mismatch =
+  Alcotest.test_case "array_equal asserts on length mismatch" `Quick (fun () ->
+    let ours_raises =
+      try ignore (Ours.array_equal (=) [|1|] [|1;2|]); false
+      with _ -> true in
+    let theirs_raises =
+      try ignore (Theirs.array_equal (=) [|1|] [|1;2|]); false
+      with _ -> true in
+    Alcotest.(check bool) "both raise" ours_raises true;
+    Alcotest.(check bool) "behavior matches" ours_raises theirs_raises)
 
 (* -- unit_monoid -- *)
 let test_unit_monoid =
@@ -1615,5 +1734,12 @@ let () =
       mismatch_iter2_ok_error;
       mismatch_map2_diff_len_list;
       mismatch_reduce2_diff_len_array;
+    ];
+    "implementation contracts", [
+      QCheck_alcotest.to_alcotest test_iter_visit_list_override;
+      test_iter_visit_list_override_recursive;
+      QCheck_alcotest.to_alcotest test_map_visit_list_override;
+      test_map_visit_list_override_recursive;
+      test_array_equal_length_mismatch;
     ];
   ]
