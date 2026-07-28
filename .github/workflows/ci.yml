@@ -13,11 +13,11 @@ jobs:
       matrix:
         ocaml-compiler: ['5.3']
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
 
-      - uses: ocaml/setup-ocaml@v3
+      - uses: ocaml/setup-ocaml@15d660006c1d3110d77c34b7faa3bddefe8b82f0 # v3.7.0
         with:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
 
